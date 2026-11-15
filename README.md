@@ -35,6 +35,8 @@ PaperPet turns that into a compact context window and sends it to DeepSeek or an
 - **Streaming LaTeX answers.** Markdown + KaTeX render while the answer streams. Reasoning tokens can be shown in a collapsible block.
 - **Per-paper history.** Conversations are stored by paper and restored when you switch back.
 - **Export conversations.** The title-bar export button saves the current paper's Q&A as Markdown or JSON, or copies Markdown to the clipboard. Exported Markdown includes paper metadata and turn numbers, so you can hand it to another agent for summarization or analysis. Image data is not embedded; turns with screenshots are marked.
+- **Question rail.** As soon as a paper has more than one question, a slim tick rail appears along the right edge of the chat: one tick per question. Hover a tick to read the question, click it to jump back to that turn, and the tick for the question you are currently looking at stays highlighted.
+- **One-click day / night.** The sun / moon button in the title bar flips between the paper-light theme and the dark reading theme, and the choice is remembered. Settings still offers System / light / dark.
 - **Desktop-pet behavior.** Transparent, frameless, always-on-top, draggable, tray icon, global `Ctrl+Alt+P` show/hide, collapse into a small pet.
 - **Privacy controls.** The API key is encrypted with Windows DPAPI; the Zotero plugin only writes local JSON and never makes network requests. Choose **Smart / Full text / Selection only** context modes.
 
@@ -89,6 +91,8 @@ pnpm demo           # demo data, no API key or Zotero needed
 | Get intuition | Click **Intuition**, or just ask; complex formulas get an example proactively |
 | Test myself | Click **Quiz me**; questions come first, answers below |
 | Take the chat elsewhere | Click the export icon in the title bar → **Markdown** / **JSON** / **Copy Markdown** (`Ctrl+Shift+E`) |
+| Jump back to an earlier question | Hover the ticks on the right edge of the chat, then click the one you want |
+| Switch day / night | Click the sun / moon button in the title bar |
 | Read a different paper | Open another PDF in Zotero; the conversation switches automatically |
 | Make the text larger | Drag any window edge/corner; type scales with the window |
 | Hide the pet | Click `×`, use the tray icon, or press `Ctrl+Alt+P` |
@@ -115,7 +119,7 @@ Screenshot image data is intentionally not exported (it would bloat the file and
 | Vision model | Separate model for screenshots; blank = use the main model |
 | Always on top | Keep the pet above Zotero/PDF |
 | Start at login | Only effective in a packaged build |
-| Theme | System / light paper / dark reading |
+| Theme | System / light paper / dark reading (the title-bar sun / moon button toggles light ↔ dark) |
 
 ## Privacy
 

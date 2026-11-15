@@ -40,6 +40,8 @@
     petStatusText: $("petStatusText"),
     petBubble: $("petBubble"),
     btnPin: $("btnPin"),
+    btnTheme: $("btnTheme"),
+    chatRail: $("chatRail"),
     btnExport: $("btnExport"),
     exportMenu: $("exportMenu"),
     btnCollapse: $("btnCollapse"),
@@ -439,7 +441,10 @@
     els.chatList.appendChild(fragment);
     renderOnboarding();
     if (state.messages.length <= 1 && currentPaper()) renderStarters();
-    requestAnimationFrame(() => scrollToBottom(false));
+    requestAnimationFrame(() => {
+      scrollToBottom(false);
+      layoutRail();
+    });
   }
 
   function renderStarters() {
@@ -557,6 +562,144 @@
     els.chatScroll.scrollTo({
       top: els.chatScroll.scrollHeight,
       behavior: smooth ? "smooth" : "auto",
+    });
+  }
+
+  /* ---------------- question rail ---------------- */
+
+  const railDots = new Map();
+  let railFrame = 0;
+  let railCurrentFrame = 0;
+
+  function railText(msg) {
+    const raw = String(msg?.content || "").replace(/\s+/g, " ").trim();
+    if (!raw) return "（空问题）";
+    return raw.length > 220 ? `${raw.slice(0, 220)}…` : raw;
+  }
+
+  function ensureRailDot(msg, index) {
+    let dot = railDots.get(msg.id);
+    if (!dot) {
+      dot = document.createElement("button");
+      dot.type = "button";
+      dot.className = "chat-rail-item";
+      dot.dataset.id = msg.id;
+      dot.innerHTML =
+        '<span class="chat-rail-tick"></span>' +
+        '<span class="chat-rail-tip"><span class="rail-num"></span><span class="rail-text"></span></span>';
+      dot.addEventListener("click", (event) => {
+        event.preventDefault();
+        jumpToQuestion(msg.id);
+      });
+      els.chatRail.appendChild(dot);
+      railDots.set(msg.id, dot);
+    }
+    dot.dataset.index = String(index + 1);
+    dot.querySelector(".rail-num").textContent = `第 ${index + 1} 问`;
+    dot.querySelector(".rail-text").textContent = railText(msg);
+    return dot;
+  }
+
+  function jumpToQuestion(id) {
+    const el = els.chatList.querySelector(`.msg.user[data-id="${CSS.escape(id)}"]`);
+    if (!el) return;
+    const top =
+      els.chatScroll.scrollTop +
+      el.getBoundingClientRect().top -
+      els.chatScroll.getBoundingClientRect().top -
+      12;
+    els.chatScroll.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    el.classList.add("is-flash");
+    setTimeout(() => el.classList.remove("is-flash"), 1200);
+    const dot = railDots.get(id);
+    if (dot) {
+      dot.classList.add("is-flash");
+      setTimeout(() => dot.classList.remove("is-flash"), 900);
+    }
+  }
+
+  function updateRailCurrent() {
+    if (!els.chatRail || els.chatRail.hidden) return;
+    const scrollTop = els.chatScroll.scrollTop;
+    const scrollRect = els.chatScroll.getBoundingClientRect();
+    let currentId = null;
+    for (const el of els.chatList.querySelectorAll(".msg.user")) {
+      const top = el.getBoundingClientRect().top - scrollRect.top + scrollTop;
+      if (top <= scrollTop + 36) currentId = el.dataset.id;
+    }
+    for (const [id, dot] of railDots) {
+      dot.classList.toggle("is-current", id === currentId);
+    }
+  }
+
+  function layoutRail() {
+    if (!els.chatRail) return;
+    const questions = [...els.chatList.querySelectorAll(".msg.user")];
+    if (questions.length < 2) {
+      els.chatRail.hidden = true;
+      if (railDots.size) {
+        railDots.clear();
+        els.chatRail.innerHTML = "";
+      }
+      return;
+    }
+    els.chatRail.hidden = false;
+    const railRect = els.chatRail.getBoundingClientRect();
+    const scrollRect = els.chatScroll.getBoundingClientRect();
+    const total = Math.max(1, els.chatScroll.scrollHeight);
+    const pad = 8;
+    const usable = Math.max(12, railRect.height - pad * 2);
+    const seen = new Set();
+    const positions = [];
+    questions.forEach((el, index) => {
+      const msg = el._message;
+      if (!msg) return;
+      seen.add(msg.id);
+      const dot = ensureRailDot(msg, index);
+      const box = el.getBoundingClientRect();
+      const center = box.top - scrollRect.top + els.chatScroll.scrollTop + box.height / 2;
+      const ratio = Math.min(1, Math.max(0, center / total));
+      positions.push({ dot, y: pad + ratio * usable });
+    });
+    for (const [id, dot] of railDots) {
+      if (!seen.has(id)) {
+        dot.remove();
+        railDots.delete(id);
+      }
+    }
+    positions.sort((a, b) => a.y - b.y);
+    const gap = 7;
+    let last = -Infinity;
+    for (const item of positions) {
+      item.y = Math.max(item.y, last + gap);
+      last = item.y;
+    }
+    const overflow = last - (pad + usable);
+    if (overflow > 0) {
+      for (const item of positions) item.y = Math.max(pad, item.y - overflow);
+    }
+    for (const item of positions) {
+      const y = Math.round(Math.min(pad + usable, Math.max(pad, item.y)));
+      item.dot.style.top = `${y}px`;
+      item.dot.classList.toggle("is-top", y < 62);
+      item.dot.classList.toggle("is-bottom", y > railRect.height - 62);
+    }
+    updateRailCurrent();
+  }
+
+  function scheduleRail() {
+    if (railFrame) return;
+    railFrame = requestAnimationFrame(() => {
+      railFrame = 0;
+      layoutRail();
+    });
+  }
+
+  function scheduleRailCurrent() {
+    if (railCurrentFrame) return;
+    railCurrentFrame = requestAnimationFrame(() => {
+      railCurrentFrame = 0;
+      updateRailCurrent();
     });
   }
 
@@ -1111,6 +1254,34 @@
     } else {
       delete document.documentElement.dataset.theme;
     }
+    syncThemeButton();
+  }
+
+  function effectiveTheme() {
+    const attr = document.documentElement.dataset.theme;
+    if (attr === "light" || attr === "dark") return attr;
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+
+  function syncThemeButton() {
+    if (!els.btnTheme) return;
+    const dark = effectiveTheme() === "dark";
+    const label = dark ? "切换到日间模式（浅色纸感）" : "切换到夜间模式（深色夜读）";
+    els.btnTheme.title = label;
+    els.btnTheme.setAttribute("aria-label", label);
+    els.btnTheme.classList.toggle("is-dark", dark);
+  }
+
+  async function toggleTheme() {
+    const next = effectiveTheme() === "dark" ? "light" : "dark";
+    setTheme(next);
+    if (els.cfgTheme) els.cfgTheme.value = next;
+    try {
+      state.config = await api.saveConfig({ theme: next });
+    } catch (error) {
+      console.warn("[paperpet] theme save failed", error);
+    }
+    toast(next === "dark" ? "夜间模式已开启" : "已切回日间模式");
   }
 
   function fillSettings() {
@@ -1289,6 +1460,16 @@
   /* ---------------- event wiring ---------------- */
 
   function bindUi() {
+    if (els.btnTheme) els.btnTheme.addEventListener("click", toggleTheme);
+    window
+      .matchMedia?.("(prefers-color-scheme: dark)")
+      ?.addEventListener?.("change", () => syncThemeButton());
+    els.chatScroll.addEventListener("scroll", scheduleRailCurrent, { passive: true });
+    if ("ResizeObserver" in window) {
+      const railObserver = new ResizeObserver(() => scheduleRail());
+      railObserver.observe(els.chatList);
+      railObserver.observe(els.chatScroll);
+    }
     els.btnPin.addEventListener("click", async () => {
       const next = !state.config.alwaysOnTop;
       state.config.alwaysOnTop = await api.pin(next);
